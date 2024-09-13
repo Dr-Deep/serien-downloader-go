@@ -1,0 +1,140 @@
+package sto
+
+import (
+	sdl "serien-downloader/internal"
+	"serien-downloader/internal/bypass"
+	"strings"
+
+	"github.com/gocolly/colly/v2"
+)
+
+// "/serie/stream/[a-zA-Z,-]+/staffel-\\d/episode-\\d+$" to mp4 links
+func (site STO_Site) getEpisode(url string) ([]sdl.Element, error) {
+
+	// hoster links
+	// hoster durchprobieren bis wir die erste mp4 bekommen und die weitergeben als Element
+
+	var (
+		c          = colly.NewCollector()
+		bypassURLS = map[bypass.Hoster][]string{}
+	)
+
+	c.OnHTML(
+		".watchEpisode",
+		func(h *colly.HTMLElement) {
+			var hoster = strings.TrimSpace(strings.ToLower(h.Text))
+
+			switch {
+			case strings.Contains(hoster, "streamtape"):
+				bypassURLS[bypass.StreamTape] = append(
+					bypassURLS[bypass.StreamTape],
+					BaseURI+h.Attr("href"),
+				)
+
+			case strings.Contains(hoster, "voe"):
+				bypassURLS[bypass.Voe] = append(
+					bypassURLS[bypass.Voe],
+					BaseURI+h.Attr("href"),
+				)
+
+			case strings.Contains(hoster, "doodstream"):
+				bypassURLS[bypass.DoodStream] = append(
+					bypassURLS[bypass.DoodStream],
+					BaseURI+h.Attr("href"),
+				)
+			}
+		},
+	)
+
+	if err := c.Visit(url); err != nil {
+		return nil, err
+	}
+
+	// Bypass
+	var (
+		lastCritcalErr error
+	)
+
+	for hoster, urls := range bypassURLS {
+		for _, url := range urls {
+			url, _ = bypass.BypassRedirect(url)
+
+			elem, err := bypass.Bypass(hoster, url)
+			if err != nil {
+				lastCritcalErr = err
+				continue
+			}
+
+			return []sdl.Element{elem}, nil
+		}
+	}
+
+	return nil, lastCritcalErr
+}
+
+// "/serie/stream/[a-zA-Z,-]+/staffel-\\d+$" to mp4 links
+func (site STO_Site) getSeasons(url string) ([]sdl.Element, error) {
+	var (
+		c     = colly.NewCollector()
+		elems []sdl.Element
+	)
+
+	c.OnHTML(
+		"a",
+		func(h *colly.HTMLElement) {
+			if seasonRegexp.MatchString(h.Attr("href")) {
+				elems = append(
+					elems,
+					sdl.Element{
+						Title:       h.Attr("title"),
+						Description: url,
+						URLS:        []string{BaseURI + h.Attr("href")},
+					},
+				)
+			}
+		},
+	)
+
+	if err := c.Visit(url); err != nil {
+		return nil, err
+	}
+
+	return elems, nil
+}
+
+func (STO_Site) getSeason(url string) ([]sdl.Element, error) {
+
+	var (
+		c     = colly.NewCollector()
+		elems []sdl.Element
+	)
+
+	c.OnHTML(
+		"a",
+		func(h *colly.HTMLElement) {
+			if episodeRegexp.MatchString(h.Attr("href")) {
+
+				for _, e := range elems {
+					if e.Title == h.Attr("href") {
+						return
+					}
+				}
+
+				elems = append(
+					elems,
+					sdl.Element{
+						Title:       h.Attr("href"),
+						Description: url,
+						URLS:        []string{BaseURI + h.Attr("href")},
+					},
+				)
+			}
+		},
+	)
+
+	if err := c.Visit(url); err != nil {
+		return nil, err
+	}
+
+	return elems, nil
+}

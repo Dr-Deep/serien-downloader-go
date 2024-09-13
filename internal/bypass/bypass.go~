@@ -1,0 +1,24 @@
+package bypass
+
+import (
+	"fmt"
+	sdl "serien-downloader/internal"
+)
+
+type Hoster int
+
+const (
+	// Hoster
+	_ Hoster = iota
+	StreamTape
+	Voe
+	DoodStream
+)
+
+func Bypass(urls map[Hoster][]string) ([]sdl.Element, error) {
+	fmt.Printf("\n%#v\n\n", urls)
+
+	// bypass redirs
+
+	return nil, nil
+}

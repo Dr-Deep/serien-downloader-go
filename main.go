@@ -1,0 +1,275 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	_sdl "serien-downloader/internal"
+	"serien-downloader/internal/dl"
+	"serien-downloader/internal/sites/sto"
+)
+
+const (
+	Banner string = `
+ ______     _____     __        
+/\  ___\   /\  __-.  /\ \       
+\ \___  \  \ \ \/\ \ \ \ \____  
+ \/\_____\  \ \____-  \ \_____\ 
+  \/_____/   \/____/   \/_____/ 
+`
+	_version   string = "sdl-4.0"
+	githubRepo string = "https://github.com/Dr-Deep/serien-downloader-go"
+)
+
+var (
+	sdl = &_sdl.SerienDownloader{
+		Dlmgr: dl.NewDlMgr(),
+		SiteModules: []_sdl.Site{
+			sto.STO_Site{},
+		},
+	}
+	programName = path.Base(os.Args[0])
+)
+
+func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "search", "s", "srch":
+			search()
+
+		case "get", "g":
+			get()
+
+		case "download", "d", "dl":
+			download()
+
+		case "help", "h":
+			help()
+
+		case "version", "v", "ver":
+			version()
+
+		default:
+			fmt.Printf("%s %s: unknown action\n", programName, os.Args[1])
+			fmt.Printf("Run '%s help' for usage\n", programName)
+		}
+	} else {
+		usage()
+	}
+
+}
+
+func usage() {
+	fmt.Printf("SDL bzw serien-downloader-go ist zum Filme und Serien downloaden von beliebigen Seiten von dennen Module vorhanden sind.\n=> @Dr.Deep übernimmt keinerlei Haftung für unerlaubtes herunterladen von geschützden Inhalten.\n")
+
+	fmt.Printf(`
+Usage:
+
+	%s <action> [args]
+
+Actions:
+	%s search [query]
+	%s get [link]
+	%s download [link]
+	%s help [action]
+	%s version
+
+Use "%s help <action>" for more information about an Action.
+`, programName, programName, programName, programName, programName, programName, programName)
+}
+
+func help() {
+	if len(os.Args) <= 2 {
+		usage()
+		return
+	}
+
+	switch os.Args[2] {
+	case "search", "s", "srch":
+		fmt.Printf("Usage: %s search [query]\n", programName)
+		fmt.Println("[query] is a Search Query")
+
+	case "get", "g":
+		fmt.Printf("Usage: %s download [link]\n", programName)
+		fmt.Println("[link] can be any link that every module supports")
+
+	case "download", "d", "dl":
+		fmt.Printf("Usage: %s download [link]\n", programName)
+		fmt.Println("[link] can be any link that every module supports")
+
+	default:
+		fmt.Printf("%s help %s: unknown help topic.\nRun '%s help'.\n", programName, os.Args[2], programName)
+	}
+}
+
+func version() {
+	fmt.Printf("%s\n\n", Banner)
+	fmt.Printf("by @Dr.Deep - '%s'\n", _version)
+	fmt.Printf("GitHub: %s\n", githubRepo)
+}
+
+func search() {
+	var _search = func(query string) {
+		results, err := sdl.Search(query)
+		if err != nil {
+			panic(err)
+		}
+
+		for i, r := range results {
+			fmt.Printf("%v: '%s' => '%v'\n", i+1, r.Title, r.URLS[0])
+		}
+	}
+
+	if len(os.Args) >= 3 {
+		// Direkete Suche
+
+		var query string
+		for _, s := range os.Args[2:] {
+			query += s //? URL encode
+		}
+
+		_search(query)
+		return
+	}
+
+	// Prompt
+	var (
+		query string
+		buf   = bufio.NewReader(os.Stdin)
+	)
+
+	fmt.Printf("(Search)>> ")
+	for {
+		b, err := buf.ReadByte()
+		if err == io.EOF {
+			break
+		}
+
+		if b == '\n' {
+			break
+		}
+
+		query += string(b)
+	}
+
+	_search(query)
+}
+
+// listet elemnente auf
+func get() {
+	/*
+
+		fmt.Println("TEST")
+		for i, e := range elems {
+			fmt.Printf("%v: '%s' => '%s'\n", i+1, e.Title, e.URLS[0])
+		}
+	*/
+}
+
+// downloaded elemente
+func download() {
+	// link identifizieren und runterladen mit sdl.*
+
+	if !(len(os.Args) >= 3) {
+		usage()
+		return
+	}
+
+	var query []string
+	for _, s := range os.Args[2:] {
+		query = append(query, s)
+	}
+
+	var elemsToDownload []_sdl.Element
+	for _, q := range query {
+		elems, err := sdl.Get(q)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s : %s\n", q, err.Error())
+			continue
+		}
+
+		elemsToDownload = append(elemsToDownload, elems...)
+
+	}
+
+	// Bypass
+	var (
+		results         = []_sdl.Element{}
+		lastCriticalErr error
+		fetchCtr        = len(elemsToDownload)
+	)
+
+	// Queue
+	for !(len(elemsToDownload) == 0) {
+		var (
+			curElem = elemsToDownload[0]
+			pop     = func() {
+				if len(elemsToDownload) > 0 {
+					elemsToDownload = elemsToDownload[1:]
+				}
+			}
+		)
+
+		fmt.Printf(
+			"=> (%v): Fetching: '%s' => '%s'\n",
+			len(elemsToDownload),
+			curElem.Title,
+			curElem.URLS[0],
+		)
+
+		//
+		elems, err := sdl.Get(curElem.URLS[0])
+		switch err {
+
+		case nil: // More Work for Queue
+			elemsToDownload = append(elemsToDownload, elems...)
+
+		case sto.ErrNotFound: // final
+			results = append(results, curElem)
+
+		default: // ERROR
+			fmt.Fprintf(os.Stderr, "Error: %v : %s\n", curElem, err.Error())
+			lastCriticalErr = err
+		}
+
+		pop()
+	}
+	fmt.Printf("\n=> Done fetching %v Elements\n\n", fetchCtr)
+
+	if len(results) == 0 && lastCriticalErr != nil {
+		panic(lastCriticalErr)
+	}
+
+	// Download
+	var errCounter = 0
+	for i, e := range results {
+		fmt.Printf(
+			"=> (%v/%v): Downloading '%s'\n",
+			i+1,
+			len(results),
+			e.Title,
+		)
+
+		if err := sdl.Download(&e); err != nil {
+			errCounter++
+			if errCounter >= 3 {
+				panic(err)
+			}
+
+			fmt.Fprintf(
+				os.Stderr,
+				"=> (%v/%v): Error: %s : %s",
+				i+1,
+				len(results),
+				e.Title,
+				err.Error(),
+			)
+
+			continue
+		}
+	}
+
+	fmt.Printf("\n=> Done downloading %v Elements\n", len(results))
+}

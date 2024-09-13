@@ -1,0 +1,59 @@
+
+```py
+    def get_episodes(self, url:str):
+        # /serie/stream/westworld/staffel-1/
+        resp = self.s.get(self.base_url+url)
+        resp.raise_for_status()
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = []
+        for e in soup.find_all("a"):
+            l = e.get("href")
+
+            if l != None and str(l).startswith(url+"/episode-"):
+                try:
+                    results.index(l)
+                except:
+                    results.append(l)
+        return results
+    
+    def get_episode(self, episode_url):
+        # /serie/stream/{str}/staffel-{int}/episode-{int}
+        resp = self.s.get(self.base_url+episode_url)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = []
+
+        for e in soup.find_all("a", {"class": "watchEpisode"}):
+            if not str(e.find("div", {"class": "hosterSiteVideoButton"}).get("title")).lower().__contains__("streamtape"):
+                continue
+            link = e.get("href")
+            
+            with webdriver.Firefox() as driver:
+                driver.install_addon("./uBlock.xpi")
+                driver.get(self.base_url+link)
+                input("Drücke <ENTER> wenn du das captcha gelöst hast\n")
+                link = driver.current_url
+
+            try:
+                results.index(link)
+            except:
+                results.append(link)
+                break
+        return results
+
+    def get_seasons(self, url:str):
+        # /serie/stream/westworld/
+        resp = self.s.get(self.base_url+url)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = []
+        for e in soup.find_all("a"):
+            l = e.get("href")
+            if l != None and str(l).startswith(url+"/staffel-") and not str(l).__contains__("/episode-"):
+                try:
+                    results.index(l)
+                except:
+                    results.append(l)
+        return results
+```

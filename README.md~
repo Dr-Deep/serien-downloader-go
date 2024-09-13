@@ -1,0 +1,9 @@
+# Todo
+* bypass modules: stdl.go voedl.go
+* site modules: s.to (search, )
+
+```go
+// entweder Film oder Serie
+type Element struct {}
+
+```

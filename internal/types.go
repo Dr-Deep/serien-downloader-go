@@ -1,0 +1,16 @@
+package sdl
+
+// site wird <site-link> übergeben
+// und das module soll einfach eine liste an bypass-links zurückgeben
+type Site interface {
+	Search(query string) ([]Element, error)
+	Get(url string) ([]Element, error)
+}
+
+type Bypasser func(bypassURL string) (title string, downloadURL string, err error)
+
+type Element struct {
+	Title       string
+	Description string
+	URLS        []string
+}
