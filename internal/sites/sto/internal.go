@@ -57,9 +57,7 @@ func (site STO_Site) getEpisode(url string) ([]sdl.Element, error) {
 
 	for hoster, urls := range bypassURLS {
 		for _, url := range urls {
-			url, _ = bypass.BypassRedirect(url)
-
-			elem, err := bypass.Bypass(hoster, url)
+			elem, err := site.SDL.Bypass(hoster, url)
 			if err != nil {
 				lastCritcalErr = err
 				continue

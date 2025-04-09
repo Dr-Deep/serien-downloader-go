@@ -1,5 +1,7 @@
 package sdl
 
+import "errors"
+
 // site wird <site-link> übergeben
 // und das module soll einfach eine liste an bypass-links zurückgeben
 type Site interface {
@@ -14,3 +16,8 @@ type Element struct {
 	Description string
 	URLS        []string
 }
+
+var (
+	// Errors
+	ErrBypasserNotFound = errors.New("Bypasser Module not found")
+)

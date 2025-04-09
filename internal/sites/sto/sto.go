@@ -31,7 +31,9 @@ var (
 )
 
 // from  sdl.Site
-type STO_Site struct{}
+type STO_Site struct {
+	SDL *sdl.SerienDownloader
+}
 
 // TODO: header mit richtigen encoder, URL encode
 func (site STO_Site) Search(query string) ([]sdl.Element, error) {

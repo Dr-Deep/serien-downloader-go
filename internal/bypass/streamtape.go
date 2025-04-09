@@ -1,57 +1,85 @@
 package bypass
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"regexp"
+	"strings"
+
+	"github.com/gocolly/colly/v2"
 )
 
-// returns title, link, error
-func GetStreamTapeVideo(streamtapeVideoURL string) (string, string, error) {
-
-	resp, err := http.Get(streamtapeVideoURL)
-	if err != nil {
-		return "", "", err
-	}
-
-	if resp.StatusCode != 200 {
-		return "", "", errors.New("Server Response Code != 200")
-	}
-
-	_respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	respBody := string(_respBody)
-
+func GetStreamtapeVideo(_url string) (vidTitle, vidURL string, _ error) {
 	var (
-		// Video Link
-		videoLink = regexp.MustCompile(
-			`/get_video\?id=[a-zA-Z0-9]+&expires=[a-zA-Z0-9]+&ip=[a-zA-Z0-9]+&token=[a-zA-Z0-9]+`,
-		).FindString(respBody)
-
-		// Video Title
-		videoTitle = regexp.MustCompile(
-			`.*<meta name=\"og:title\" content=\"(.*?)\">`,
-		).FindStringSubmatch(respBody)[1]
+		url   = strings.Replace(_url, "/e/", "/v/", 0) // make link downloadable
+		base  string
+		token string
+		c     = colly.NewCollector(
+			colly.UserAgent("Mozilla/5.0 (X11; Linux x86_64; rv:129.0) Gecko/20100101 Firefox/129.0"),
+		)
+		lastCriticalErr error
 	)
 
-	if videoLink == "" {
-		return "", "", errors.New("couldt get videoLink")
-	}
-	if videoTitle == "" {
-		return "", "", errors.New("couldt get videoTitle")
+	/*
+	 * Find Video Title
+	 */
+	c.OnHTML("meta", func(h *colly.HTMLElement) {
+		if h.Attr("name") == "og:title" {
+			vidTitle = h.Attr("content")
+		}
+	})
+
+	/*
+	 * Find Video URL
+	 */
+	c.OnHTML("script", func(h *colly.HTMLElement) {
+
+		// grab js link expression
+		var (
+			exp   = regexp.MustCompile(`document.getElementById\('ideoolink'\).innerHTML = (.+);`)
+			match string
+		)
+		if matches := exp.FindStringSubmatch(h.Text); len(matches) >= 2 {
+			match = matches[1]
+		} else {
+			return
+		}
+
+		// grab token
+		var (
+			exp2 = regexp.MustCompile(`token=([^&']+)`)
+		)
+
+		token = exp2.FindString(match)
+	})
+
+	// grab base URL
+	c.OnHTML("#ideoolink", func(h *colly.HTMLElement) {
+		if h.Text != "" {
+			base = h.Text
+		}
+	})
+
+	if err := c.Visit(url); err != nil {
+		return "", "", err
 	}
 
-	videoLink = fmt.Sprintf(
-		"%s://%s%s",
-		resp.Request.URL.Scheme,
-		resp.Request.URL.Host,
-		videoLink,
-	)
+	if lastCriticalErr != nil {
+		return "", "", lastCriticalErr
+	}
 
-	return videoTitle, videoLink, nil
+	// zusammenbauen
+	base = strings.Split(base, "token=")[0]
+	vidURL = "https:/" + base + token //?  stream=1?
+
+	return vidTitle, vidURL, nil
 }
+
+/*
+	if resp.StatusCode == http.StatusFound { // 302:Found
+		_url, err := resp.Location()
+		if err != nil {
+			return url, err
+		}
+
+		return _url.String(), nil
+	}
+*/

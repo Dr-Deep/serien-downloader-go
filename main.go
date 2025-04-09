@@ -7,7 +7,9 @@ import (
 	"os"
 	"path"
 	_sdl "serien-downloader/internal"
+	"serien-downloader/internal/bypass"
 	"serien-downloader/internal/dl"
+	"serien-downloader/internal/sites/imdb"
 	"serien-downloader/internal/sites/sto"
 )
 
@@ -24,14 +26,23 @@ const (
 )
 
 var (
-	sdl = &_sdl.SerienDownloader{
-		Dlmgr: dl.NewDlMgr(),
-		SiteModules: []_sdl.Site{
-			sto.STO_Site{},
-		},
-	}
+	sdl         = &_sdl.SerienDownloader{}
 	programName = path.Base(os.Args[0])
 )
+
+func init() {
+	sdl.Dlmgr = dl.NewDlMgr()
+	sdl.BypassModules = []bypass.Bypasser{
+		bypass.GetStreamtapeVideo,
+		bypass.GetVoeVideo,
+	}
+	sdl.SiteModules = []_sdl.Site{
+		sto.STO_Site{
+			SDL: sdl,
+		},
+		imdb.IMDB_Site{},
+	}
+}
 
 func main() {
 	if len(os.Args) > 1 {
@@ -62,7 +73,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Printf("SDL bzw serien-downloader-go ist zum Filme und Serien downloaden von beliebigen Seiten von dennen Module vorhanden sind.\n=> @Dr.Deep übernimmt keinerlei Haftung für unerlaubtes herunterladen von geschützden Inhalten.\n")
+	fmt.Printf("SDL bzw serien-downloader-go ist zum Videos und Video-Reihen downloaden von beliebigen Seiten von dennen Module vorhanden sind.\n=> @Dr.Deep übernimmt keinerlei Haftung für irgendetwas das mit diesem program gemacht wird.\n")
 
 	fmt.Printf(`
 Usage:
@@ -122,9 +133,8 @@ func search() {
 		}
 	}
 
+	// Direkete Suche
 	if len(os.Args) >= 3 {
-		// Direkete Suche
-
 		var query string
 		for _, s := range os.Args[2:] {
 			query += s //? URL encode
@@ -183,7 +193,13 @@ func download() {
 	}
 
 	var elemsToDownload []_sdl.Element
-	for _, q := range query {
+	for i, q := range query {
+		fmt.Printf(
+			"=> (%v/%v) Fetching: '%s'\n",
+			i+1, len(query),
+			q,
+		)
+
 		elems, err := sdl.Get(q)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s : %s\n", q, err.Error())
@@ -213,7 +229,7 @@ func download() {
 		)
 
 		fmt.Printf(
-			"=> (%v): Fetching: '%s' => '%s'\n",
+			"=> (%v): Querying: '%s' => '%s'\n",
 			len(elemsToDownload),
 			curElem.Title,
 			curElem.URLS[0],
@@ -236,7 +252,7 @@ func download() {
 
 		pop()
 	}
-	fmt.Printf("\n=> Done fetching %v Elements\n\n", fetchCtr)
+	fmt.Printf("\n=> Done querying %v Elements\n\n", fetchCtr)
 
 	if len(results) == 0 && lastCriticalErr != nil {
 		panic(lastCriticalErr)
@@ -270,6 +286,8 @@ func download() {
 			continue
 		}
 	}
+
+	//sdl.Dlmgr.Wait()
 
 	fmt.Printf("\n=> Done downloading %v Elements\n", len(results))
 }

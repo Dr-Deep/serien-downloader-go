@@ -1,99 +1,69 @@
 package dl
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"sync"
 )
 
-const (
-	parallelConnections = 4
-)
+/*
+Options:
+   * ytdlp / standalone bzw buildin
+   * paralel?
+   * concurrent?
 
-var (
-	ErrUnabelToGetFile = errors.New("Unable to fetch file")
-)
+   MP4 und HLS download mit "--concurrent-fragments 2"
+*/
 
 type DownloadManager struct {
 	sync.WaitGroup
 }
 
-func NewDlMgr() *DownloadManager {
-	return &DownloadManager{sync.WaitGroup{}}
+func NewDlMgr() DownloadManager {
+	return DownloadManager{sync.WaitGroup{}}
 }
 
-func (dlmgr *DownloadManager) Download(url string, filePath string) error {
+/*
+   mit dlmgr.Download() element der dl queue hinzufügen
+   mit dlmgr.Wait() auf alle dl's warten und status anzeigen
+*/
 
-	// Get file size from the server
-	resp, err := http.Head(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return ErrUnabelToGetFile
-	}
-
-	var (
-		fileSize = resp.ContentLength
-		partSize = fileSize / parallelConnections
+func (dlmgr *DownloadManager) Download(_filename string, url string) {
+	cmd := exec.Command(
+		"yt-dlp",
+		//"-q",
+		"--continue",
+		"-f mp4",
+		url,
+		"-o", _filename,
 	)
-
-	// Output-File
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		panic(err)
 	}
-	defer file.Close()
+}
 
-	// Download
-	for i := 0; i < parallelConnections; i++ {
-		dlmgr.Add(1)
-		offset := int64(i) * partSize
-
-		// For the last part, make sure to download any remaining bytes
-		if i == parallelConnections-1 {
-			partSize = fileSize - offset
-		}
-
-		go dlmgr.downloadPart(url, i+1, file, offset, partSize)
-	}
-
-	// Wait for downloads
+func (dlmgr *DownloadManager) Wait() {
 	dlmgr.Wait()
-
-	return nil
 }
 
-func (dlmgr *DownloadManager) downloadPart(url string, partNum int, file *os.File, offset int64, chunkSize int64) {
-	defer dlmgr.Done()
+// "ffmpeg -i input.mp4/stream -c:v libx264 -crf 0 output.mp4"
+// ffmpeg -hwaccel vaapi -vaapi_device /dev/dri/renderD128 -i input.mp4
+// -c:v h264_vaapi -b:v 4M -c:a copy output.mp4
+// ffmpeg -hwaccel vaapi -vaapi_device /dev/dri/renderX -i X.mp4 -:c:v h264_vaapi -crf 0 X.mp4
 
-	// Create an HTTP request with a "Range" header to download a specific part
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		panic(err)
-	}
+/*
+## downloads mit ffmpeg
+ffmpeg -i link title.mp4
+format: mp4 hohe qualität kleine größe
+-loglevel (error,16)
+concurrent downloads?
+*/
 
-	req.Header.Set(
-		"Range",
-		fmt.Sprintf("bytes=%d-%d", offset, offset+chunkSize-1),
-	)
+// info/status von ffmpeg über pipe?
+// und dann anzeigen
+// return codes als error zeichen und stderr in logger senden
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	// Write the part to the file at the correct offset
-	file.Seek(offset, 0)
-	_, err = io.Copy(file, resp.Body)
-	if err != nil {
-		panic(err)
-	}
-}
+// kann ffmpeg auf HD hochskalieren?

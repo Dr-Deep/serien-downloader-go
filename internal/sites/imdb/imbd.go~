@@ -1,0 +1,10 @@
+package imdb
+
+type IMDB_Site struct{}
+
+// return sto search result link
+func (site IMDB_Site) Search(query string) ([]sdl.Element, error) {}
+
+func (site STO_Site) Get(url string) ([]sdl.Element, error) {
+return nil, nil
+}

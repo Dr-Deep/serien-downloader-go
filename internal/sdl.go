@@ -1,10 +1,16 @@
 package sdl
 
-import "serien-downloader/internal/dl"
+import (
+	"path"
+	"serien-downloader/internal/bypass"
+	"serien-downloader/internal/dl"
+	"strings"
+)
 
 type SerienDownloader struct {
-	SiteModules []Site
-	Dlmgr       *dl.DownloadManager
+	BypassModules []bypass.Bypasser
+	SiteModules   []Site
+	Dlmgr         dl.DownloadManager
 }
 
 func (sdl SerienDownloader) Search(query string) ([]Element, error) {
@@ -45,10 +51,64 @@ func (sdl SerienDownloader) Get(url string) ([]Element, error) {
 }
 
 func (sdl SerienDownloader) Download(e *Element) error {
+
+	var (
+		filename = strings.ReplaceAll(path.Clean(e.Title), " ", ".") + ".mp4"
+	)
+
+	// time
+
+	sdl.Dlmgr.Download(filename, e.URLS[0])
+
+	return nil
+
 	// progress?
 
 	// filepath:
 	// './{title}.mp4'; wenn '.mp4' nicht schon da und wirklich mp4 file
 	// invalide zeichen entfernen (utf8 check, filesys check)
-	return nil
+
+	// mit ffmpeg recoden?
+	// go-routine
+
+	/*
+	   go dlmgr.Download() -> ffmpeg
+	   dlmgr managed parallele downloads
+	   dlmgr.Wait()
+
+	*/
+}
+
+func (sdl SerienDownloader) Bypass(hoster bypass.Hoster, url string) (Element, error) {
+	switch hoster {
+	case bypass.StreamTape:
+		title, link, err := bypass.GetStreamtapeVideo(url)
+		if err != nil {
+			return Element{}, err
+		}
+
+		return Element{
+			Title:       title,
+			Description: "",
+			URLS:        []string{link},
+		}, nil
+
+	case bypass.Voe:
+		title, link, err := bypass.GetVoeVideo(url)
+		if err != nil {
+			return Element{}, err
+		}
+
+		return Element{
+			Title:       title,
+			Description: "",
+			URLS:        []string{link},
+		}, nil
+
+	case bypass.DoodStream:
+		//
+
+	}
+
+	return Element{}, ErrBypasserNotFound
 }
